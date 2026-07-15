@@ -23,8 +23,24 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "i2c_lcd.h"
 #include "usbd_hid.h"
 extern USBD_HandleTypeDef hUsbDeviceFS;
+
+#define BTN_UP_PORT     GPIOC
+#define BTN_UP_PIN      GPIO_PIN_0
+
+#define BTN_DOWN_PORT   GPIOC
+#define BTN_DOWN_PIN    GPIO_PIN_3
+
+#define BTN_OK_PORT     GPIOF
+#define BTN_OK_PIN      GPIO_PIN_3
+
+#define BTN_RIGHT_PORT  GPIOF
+#define BTN_RIGHT_PIN   GPIO_PIN_5
+
+#define BTN_LEFT_PORT   GPIOF
+#define BTN_LEFT_PIN    GPIO_PIN_10
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -64,6 +80,8 @@ ETH_TxPacketConfig TxConfig;
 
 ETH_HandleTypeDef heth;
 
+I2C_HandleTypeDef hi2c1;
+
 UART_HandleTypeDef huart3;
 
 /* USER CODE BEGIN PV */
@@ -75,12 +93,31 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ETH_Init(void);
 static void MX_USART3_UART_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+uint8_t app_state = 0;
+char entered_pin[5] = {0};
+uint8_t pin_index = 0;
+char secret_pin[] = "1234";
+
+typedef struct {
+	uint8_t state;
+	uint8_t last_tick;
+} Button_TypeDef;
+
+Button_TypeDef btn_up = {0, 0};
+Button_TypeDef btn_down = {0, 0};
+Button_TypeDef btn_left = {0, 0};
+Button_TypeDef btn_right = {0, 0};
+Button_TypeDef btn_ok = {0, 0};
+
+uint8_t cur_row = 0;
+uint8_t cur_col = 0;
 
 // Таблица соответствий ASCII -> USB HID Scancode (US QWERTY)
 const uint8_t asciiMap[128] = {
@@ -197,7 +234,18 @@ int main(void)
   MX_ETH_Init();
   MX_USART3_UART_Init();
   MX_USB_DEVICE_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_Delay(100);
+
+  lcd_init();
+  lcd_put_cur(0, 0);
+  lcd_send_string("  Password Manager");
+
+  lcd_put_cur(2, 2);
+  lcd_send_string("Press OK to enter");
+  lcd_put_cur(3, 0);
+  lcd_send_string("      PIN-code");
 
   /* USER CODE END 2 */
 
@@ -208,11 +256,106 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	if (HAL_GPIO_ReadPin(BTN_OK_PORT, BTN_OK_PIN) == GPIO_PIN_RESET) {
+		if (app_state == 0) {
+			app_state = 1;
+			pin_index = 0;
+			memset(entered_pin, 0, sizeof(entered_pin));
+
+		lcd_clear();
+		lcd_put_cur(0, 6);
+		lcd_send_string("1  2  3");
+		lcd_put_cur(1, 6);
+		lcd_send_string("4  5  6");
+		lcd_put_cur(2, 6);
+		lcd_send_string("7  8  9");
+		lcd_put_cur(3, 9);
+		lcd_send_string("0");
+
+		lcd_send_cmd(0x0F);
+		cur_row = 0;
+		cur_col = 6;
+		lcd_put_cur(cur_row, cur_col);
+		HAL_Delay(300);
+		} else if (app_state == 1) {
+			char selected_digit = 0;
+
+		    if (cur_row == 0 && cur_col == 6)  selected_digit = '1';
+		    else if (cur_row == 0 && cur_col == 9)  selected_digit = '2';
+		    else if (cur_row == 0 && cur_col == 12) selected_digit = '3';
+		    else if (cur_row == 1 && cur_col == 6)  selected_digit = '4';
+		    else if (cur_row == 1 && cur_col == 9)  selected_digit = '5';
+		    else if (cur_row == 1 && cur_col == 12) selected_digit = '6';
+		    else if (cur_row == 2 && cur_col == 6)  selected_digit = '7';
+		    else if (cur_row == 2 && cur_col == 9)  selected_digit = '8';
+		    else if (cur_row == 2 && cur_col == 12) selected_digit = '9';
+		    else if (cur_row == 3 && cur_col == 9)  selected_digit = '0';
+
+		    if (selected_digit != 0) {
+		    	entered_pin[pin_index] = selected_digit;
+		    	lcd_send_cmd(0x0C);
+		    	lcd_put_cur(3, pin_index);
+		    	lcd_send_string("*");
+		    	lcd_send_cmd(0x0F);
+		    	lcd_put_cur(cur_row, cur_col);
+
+		    	pin_index++;
+
+		    	if (pin_index == 4) {
+		    		lcd_send_cmd(0x0C);
+		    		lcd_clear();
+
+		    		if (strcmp(entered_pin, secret_pin) == 0) {
+		    			lcd_put_cur(1, 3);
+		    		    lcd_send_string("ACCESS GRANTED");
+		    		    HAL_Delay(2000);
+		    		    app_state = 2;
+		    		} else {
+		    			lcd_put_cur(1, 3);
+		    		    lcd_send_string("ACCESS DENIED");
+		    		    HAL_Delay(2000);
+
+		    		    app_state = 0;
+		    		    lcd_clear();
+		    		    lcd_put_cur(1, 1);
+		    		    lcd_send_string("Password Manager");
+		    		    lcd_put_cur(2, 1);
+		    		    lcd_send_string("Press OK to start");
+		    		}
+		    	}
+		    }
+		}
+
+		HAL_Delay(200);
+	}
+
+	if (HAL_GPIO_ReadPin(BTN_UP_PORT, BTN_UP_PIN) == GPIO_PIN_RESET && cur_row > 0) {
+		cur_row--;
+		lcd_put_cur(cur_row, cur_col);
+		HAL_Delay(200);
+	} else if (HAL_GPIO_ReadPin(BTN_DOWN_PORT, BTN_DOWN_PIN) == GPIO_PIN_RESET && cur_row < 3) {
+		cur_row++;
+		if (cur_row == 3)
+			cur_col = 9;
+		lcd_put_cur(cur_row, cur_col);
+		HAL_Delay(200);
+	} else if (HAL_GPIO_ReadPin(BTN_RIGHT_PORT, BTN_RIGHT_PIN) == GPIO_PIN_RESET && cur_col < 12) {
+		cur_col+= 3;
+		lcd_put_cur(cur_row, cur_col);
+		HAL_Delay(200);
+	} else if (HAL_GPIO_ReadPin(BTN_LEFT_PORT, BTN_LEFT_PIN) == GPIO_PIN_RESET && cur_col > 6) {
+		cur_col-= 3;
+		lcd_put_cur(cur_row, cur_col);
+		HAL_Delay(200);
+	}
+
+
 	if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET) {
 		Send_Str("Admin123!\n");
 		HAL_Delay(500);
 	}
   }
+
   /* USER CODE END 3 */
 }
 
@@ -315,6 +458,54 @@ static void MX_ETH_Init(void)
 }
 
 /**
+  * @brief I2C1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_I2C1_Init(void)
+{
+
+  /* USER CODE BEGIN I2C1_Init 0 */
+
+  /* USER CODE END I2C1_Init 0 */
+
+  /* USER CODE BEGIN I2C1_Init 1 */
+
+  /* USER CODE END I2C1_Init 1 */
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.Timing = 0x00808CD2;
+  hi2c1.Init.OwnAddress1 = 0;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0;
+  hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  if (HAL_I2C_Init(&hi2c1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Analogue filter
+  */
+  if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Digital filter
+  */
+  if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN I2C1_Init 2 */
+
+  /* USER CODE END I2C1_Init 2 */
+
+}
+
+/**
   * @brief USART3 Initialization Function
   * @param None
   * @retval None
@@ -362,6 +553,7 @@ static void MX_GPIO_Init(void)
 
   /* GPIO Ports Clock Enable */
   __HAL_RCC_GPIOC_CLK_ENABLE();
+  __HAL_RCC_GPIOF_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
@@ -379,6 +571,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(USER_Btn_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PF3 PF5 PF10 */
+  GPIO_InitStruct.Pin = GPIO_PIN_3|GPIO_PIN_5|GPIO_PIN_10;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PC0 PC3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_3;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD1_Pin LD3_Pin LD2_Pin */
   GPIO_InitStruct.Pin = LD1_Pin|LD3_Pin|LD2_Pin;
