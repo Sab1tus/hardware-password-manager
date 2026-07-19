@@ -103,7 +103,12 @@ static void MX_I2C1_Init(void);
 uint8_t app_state = 0;
 char entered_pin[5] = {0};
 uint8_t pin_index = 0;
-char secret_pin[] = "1234";
+char secret_pin[] = "1111";
+
+char* account_names[] = {"Telegram", "Gmail", "Github", "VK.com", "Mail.ru"};
+uint8_t accounts_number = 5;
+uint8_t menu_row = 0;
+uint8_t menu_index = 0;
 
 typedef struct {
 	uint8_t state;
@@ -201,6 +206,28 @@ void Send_Str(const char* str) {
 	while(*str)
 		Send_Char(*str++);
 }
+
+void Draw_Menu() {
+	lcd_clear();
+	lcd_put_cur(0, 0);
+	lcd_send_string("Choose password:");
+
+	for (int i = 0; i < 3; i++) {
+		int current_account = menu_row + i;
+
+		if (current_account >= accounts_number)
+			break;
+
+		lcd_put_cur(i + 1, 0);
+		if (current_account == menu_index)
+			lcd_send_string("> ");
+		else
+			lcd_send_string("  ");
+
+		lcd_send_string(account_names[current_account]);
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -239,13 +266,13 @@ int main(void)
   HAL_Delay(100);
 
   lcd_init();
-  lcd_put_cur(0, 0);
-  lcd_send_string("  Password Manager");
+  lcd_put_cur(0, 2);
+  lcd_send_string("Password Manager");
 
   lcd_put_cur(2, 2);
   lcd_send_string("Press OK to enter");
-  lcd_put_cur(3, 0);
-  lcd_send_string("      PIN-code");
+  lcd_put_cur(3, 6);
+  lcd_send_string("PIN-code");
 
   /* USER CODE END 2 */
 
@@ -262,21 +289,21 @@ int main(void)
 			pin_index = 0;
 			memset(entered_pin, 0, sizeof(entered_pin));
 
-		lcd_clear();
-		lcd_put_cur(0, 6);
-		lcd_send_string("1  2  3");
-		lcd_put_cur(1, 6);
-		lcd_send_string("4  5  6");
-		lcd_put_cur(2, 6);
-		lcd_send_string("7  8  9");
-		lcd_put_cur(3, 9);
-		lcd_send_string("0");
+			lcd_clear();
+			lcd_put_cur(0, 6);
+			lcd_send_string("1  2  3");
+			lcd_put_cur(1, 6);
+			lcd_send_string("4  5  6");
+			lcd_put_cur(2, 6);
+			lcd_send_string("7  8  9");
+			lcd_put_cur(3, 9);
+			lcd_send_string("0");
 
-		lcd_send_cmd(0x0F);
-		cur_row = 0;
-		cur_col = 6;
-		lcd_put_cur(cur_row, cur_col);
-		HAL_Delay(300);
+			lcd_send_cmd(0x0F);
+			cur_row = 0;
+			cur_col = 6;
+			lcd_put_cur(cur_row, cur_col);
+
 		} else if (app_state == 1) {
 			char selected_digit = 0;
 
@@ -293,10 +320,8 @@ int main(void)
 
 		    if (selected_digit != 0) {
 		    	entered_pin[pin_index] = selected_digit;
-		    	lcd_send_cmd(0x0C);
 		    	lcd_put_cur(3, pin_index);
 		    	lcd_send_string("*");
-		    	lcd_send_cmd(0x0F);
 		    	lcd_put_cur(cur_row, cur_col);
 
 		    	pin_index++;
@@ -308,8 +333,16 @@ int main(void)
 		    		if (strcmp(entered_pin, secret_pin) == 0) {
 		    			lcd_put_cur(1, 3);
 		    		    lcd_send_string("ACCESS GRANTED");
-		    		    HAL_Delay(2000);
+
+		    		    HAL_Delay(1000);
+
 		    		    app_state = 2;
+
+		    		    menu_index = 0;
+		    		    menu_row = 0;
+
+		    		    Draw_Menu();
+
 		    		} else {
 		    			lcd_put_cur(1, 3);
 		    		    lcd_send_string("ACCESS DENIED");
@@ -317,10 +350,13 @@ int main(void)
 
 		    		    app_state = 0;
 		    		    lcd_clear();
-		    		    lcd_put_cur(1, 1);
+
+		    		    lcd_put_cur(0, 2);
 		    		    lcd_send_string("Password Manager");
-		    		    lcd_put_cur(2, 1);
-		    		    lcd_send_string("Press OK to start");
+		    		    lcd_put_cur(2, 2);
+		    		    lcd_send_string("Press OK to enter");
+		    		    lcd_put_cur(3, 6);
+		    		    lcd_send_string("PIN-code");
 		    		}
 		    	}
 		    }
@@ -329,26 +365,53 @@ int main(void)
 		HAL_Delay(200);
 	}
 
-	if (HAL_GPIO_ReadPin(BTN_UP_PORT, BTN_UP_PIN) == GPIO_PIN_RESET && cur_row > 0) {
-		cur_row--;
-		lcd_put_cur(cur_row, cur_col);
-		HAL_Delay(200);
-	} else if (HAL_GPIO_ReadPin(BTN_DOWN_PORT, BTN_DOWN_PIN) == GPIO_PIN_RESET && cur_row < 3) {
-		cur_row++;
-		if (cur_row == 3)
-			cur_col = 9;
-		lcd_put_cur(cur_row, cur_col);
-		HAL_Delay(200);
-	} else if (HAL_GPIO_ReadPin(BTN_RIGHT_PORT, BTN_RIGHT_PIN) == GPIO_PIN_RESET && cur_col < 12) {
-		cur_col+= 3;
-		lcd_put_cur(cur_row, cur_col);
-		HAL_Delay(200);
-	} else if (HAL_GPIO_ReadPin(BTN_LEFT_PORT, BTN_LEFT_PIN) == GPIO_PIN_RESET && cur_col > 6) {
-		cur_col-= 3;
-		lcd_put_cur(cur_row, cur_col);
-		HAL_Delay(200);
-	}
+	else if (HAL_GPIO_ReadPin(BTN_UP_PORT, BTN_UP_PIN) == GPIO_PIN_RESET) {
+		if (app_state == 1 && cur_row > 0) {
+			cur_row--;
+			lcd_put_cur(cur_row, cur_col);
+		} else if (app_state == 2) {
+			if (menu_index > 0)
+				menu_index--;
+			if (menu_index < menu_row)
+				menu_row--;
+			Draw_Menu();
+		}
 
+		HAL_Delay(200);
+
+	} else if (HAL_GPIO_ReadPin(BTN_DOWN_PORT, BTN_DOWN_PIN) == GPIO_PIN_RESET) {
+		if (app_state == 1 && cur_row < 3) {
+			cur_row++;
+			if (cur_row == 3)
+				cur_col = 9;
+			lcd_put_cur(cur_row, cur_col);
+		} else if (app_state == 2) {
+			if (menu_index < accounts_number - 1)
+				menu_index++;
+			if (menu_index >= menu_row + 3)
+				menu_row++;
+			Draw_Menu();
+		}
+
+		HAL_Delay(200);
+
+	} else if (HAL_GPIO_ReadPin(BTN_RIGHT_PORT, BTN_RIGHT_PIN) == GPIO_PIN_RESET) {
+		if (app_state == 1 && cur_col < 12 && cur_row != 3) {
+			cur_col+= 3;
+			lcd_put_cur(cur_row, cur_col);
+		}
+
+		HAL_Delay(200);
+
+	} else if (HAL_GPIO_ReadPin(BTN_LEFT_PORT, BTN_LEFT_PIN) == GPIO_PIN_RESET) {
+		if (app_state == 1 && cur_col > 6 && cur_row != 3) {
+			cur_col-= 3;
+			lcd_put_cur(cur_row, cur_col);
+		}
+
+		HAL_Delay(200);
+
+	}
 
 	if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET) {
 		Send_Str("Admin123!\n");
