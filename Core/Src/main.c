@@ -106,6 +106,7 @@ uint8_t pin_index = 0;
 char secret_pin[] = "1111";
 
 char* account_names[] = {"Telegram", "Gmail", "Github", "VK.com", "Mail.ru"};
+char* passwords[] = {"Admin123!", "KroliK9", "Uyuo12yuy", "_=1#0)==", "qwerty"};
 uint8_t accounts_number = 5;
 uint8_t menu_row = 0;
 uint8_t menu_index = 0;
@@ -360,6 +361,17 @@ int main(void)
 		    		}
 		    	}
 		    }
+
+		} else if (app_state == 2) {
+			lcd_clear();
+			lcd_put_cur(1, 1);
+			lcd_send_string("Sending password..");
+
+			Send_Str(passwords[menu_index]);
+			HAL_Delay(1000);
+
+			Draw_Menu();
+
 		}
 
 		HAL_Delay(200);
@@ -411,11 +423,6 @@ int main(void)
 
 		HAL_Delay(200);
 
-	}
-
-	if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_13) == GPIO_PIN_SET) {
-		Send_Str("Admin123!\n");
-		HAL_Delay(500);
 	}
   }
 
