@@ -18,4 +18,4 @@
 ![](Schemes/Func_scheme.png)
 
 ## Принципиальная схема устройства
-![](Schemes/Princ_scheme.png)
+![](Schemes/Design_circ_scheme.png)
