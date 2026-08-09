@@ -27,6 +27,8 @@
 #include "usbd_hid.h"
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
+#define EEPROM_ADDR 0xA0
+
 #define BTN_UP_PORT     GPIOC
 #define BTN_UP_PIN      GPIO_PIN_0
 
@@ -229,6 +231,14 @@ void Draw_Menu() {
 	}
 }
 
+void EEPROM_Write(uint16_t mem_address, uint8_t *data, uint16_t length) {
+	HAL_I2C_Mem_Write(&hi2c1, EEPROM_ADDR, mem_address, I2C_MEMADD_SIZE_16BIT, data, length, 1000);
+	HAL_Delay(5);
+}
+
+void EEPROM_Read(uint16_t mem_address, uint8_t *data, uint16_t length) {
+	HAL_I2C_Mem_Read(&hi2c1, EEPROM_ADDR, mem_address, I2C_MEMADD_SIZE_16BIT, data, length, 1000);
+}
 /* USER CODE END 0 */
 
 /**
@@ -367,7 +377,15 @@ int main(void)
 			lcd_put_cur(1, 1);
 			lcd_send_string("Sending password..");
 
-			Send_Str(passwords[menu_index]);
+			char password_buffer[64] = {0};
+
+			uint16_t address_target = menu_index * 64;
+			EEPROM_Read(address_target, (uint8_t*)password_buffer, 64);
+
+			Send_Str(password_buffer);
+
+			memset(password_buffer, 0, sizeof(password_buffer));
+
 			HAL_Delay(1000);
 
 			Draw_Menu();
